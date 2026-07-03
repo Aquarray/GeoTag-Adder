@@ -34,7 +34,7 @@ public class OverlayHandler {
 //            }
 //            String resp = stbuiler.toString();
             String resp = stream.readLine();
-            final String regex = "display_name\":\"(.*?)\",.*(?:city|town|village|county)\":\"(\\w+)\",.*(?:state)\":\"(\\w+)\",.*(?:country)\":\"(\\w+)\"";
+            final String regex = "display_name\":\"(.*?)\",.*(?:city|town|village|county)\":\"(.*?)\",.*(?:state)\":\"(.*?)\",.*(?:country)\":\"(.*?)\"";
             final Pattern pattern = Pattern.compile(regex, Pattern.MULTILINE);
             final Matcher matcher = pattern.matcher(resp);
             ImageDetails de= new ImageDetails();

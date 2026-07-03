@@ -15,7 +15,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.2"
         buildConfigField("String", "GAPIKEY", "${project.findProperty("GMAPSAPI")}")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

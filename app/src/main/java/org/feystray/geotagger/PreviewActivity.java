@@ -63,6 +63,9 @@ public class PreviewActivity extends AppCompatActivity {
 
     Boolean EditMode = false;
 
+    DialogsHandler dialogsHandler;
+    SharedPreferences sharedPreferences;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -73,19 +76,29 @@ public class PreviewActivity extends AppCompatActivity {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
+
+        dialogsHandler = new DialogsHandler(this);
+        sharedPreferences = getSharedPreferences("overlay", MODE_PRIVATE);
+        imgV = findViewById(R.id.imageView);
+
         String imageURI = getIntent().getStringExtra("URI");
         if(imageURI==null) {
             Toast.makeText(this, "Invalid Image", Toast.LENGTH_SHORT).show();
             finish();
         }
+        Bitmap orgImg = RoatateImageIFExif(imageURI);
+        if (hasMetaSaved()){
+            loadFromSharedPrefs();
+            showGeoTaggedImg(orgImg);
+        }else{
+            imgV.setImageBitmap(orgImg);
+        }
 
-        showGeoTaggedImg(imageURI);
-        imgV = findViewById(R.id.imageView);
         Button editButton = findViewById(R.id.editButton);
         Button moreOptions = findViewById(R.id.moreOptions);
         Slider textSizeSlide = findViewById(R.id.textSizeSlider);
         FloatingActionButton saveButton = (FloatingActionButton) findViewById(R.id.saveButton);
-        imgV.setImageBitmap(RoatateImageIFExif(imageURI));
+
         editButton.setOnClickListener(v->{
             if (!EditMode){
                 editButton.setText("Save");
@@ -102,20 +115,49 @@ public class PreviewActivity extends AppCompatActivity {
         });
         ((FloatingActionButton) findViewById(R.id.saveButton)).setOnClickListener(v->saveImage());
         moreOptions.setOnClickListener(v->{
-            OpenLocationDialog();
+            dialogsHandler.showLocationAndTimeDialog(imgData, getSupportFragmentManager(), new DialogsHandler.LocationandTimeDialogEvent() {
+                @Override
+                public void onSave(float lat, float lon, LocalDateTime datenTime, String short_Addr) {
+                    autoFillDetails(lat, lon, short_Addr, new autFillDetailsEvents() {
+                        @Override
+                        public void onSuccess(ImageDetails img) {
+                            if (datenTime != null){
+                                img.time = datenTime;
+                            }
+                            imgData = img;
+                            saveSharedPrefs(img);
+                            showGeoTaggedImg(orgImg);
+                        }
+
+                        @Override
+                        public void onError(String API) {
+                            Toast.makeText(PreviewActivity.this, "Unable to Reach "+API+" API", Toast.LENGTH_SHORT).show();
+                            finish();
+                        }
+                    });
+                }
+
+                @Override
+                public void onCancel() {
+
+                }
+            });
+        });
+        textSizeSlide.addOnChangeListener((slider, v, b) -> {
+            Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            vibrator.cancel();
+            vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK));
         });
         textSizeSlide.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
             @Override
             public void onStartTrackingTouch(@NonNull Slider slider) {
-                Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-                vibrator.cancel();
-                vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK));
+
             }
 
             @Override
             public void onStopTrackingTouch(@NonNull Slider slider) {
                 if (imgData!=null ) imgData.textSize = slider.getValue();
-                showGeoTaggedImg(imageURI);
+                showGeoTaggedImg(orgImg);
             }
         });
         saveButton.setOnClickListener(v->saveImage());
@@ -165,142 +207,81 @@ public class PreviewActivity extends AppCompatActivity {
         return null;
     }
 
-    @SuppressLint("ClickableViewAccessibility")
-    private void OpenLocationDialog(){
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
-        View v = getLayoutInflater().inflate(R.layout.more_edit_dialog, null);
-        Button updateValues = v.findViewById(R.id.button2);
-        EditText lat = v.findViewById(R.id.latitude);
-        EditText lon = v.findViewById(R.id.longitude);
-        EditText date = v.findViewById(R.id.date);
-        EditText time = v.findViewById(R.id.time);
-        EditText shortAddr = v.findViewById(R.id.short_addr);
-        MaterialCheckBox checkBox = v.findViewById(R.id.showadvanced);
-        if (imgData != null){
-            lat.getEditableText().append(String.valueOf(imgData.latitude));
-            lon.getEditableText().append(String.valueOf(imgData.longitude));
-            date.getEditableText().append(imgData.time.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
-            shortAddr.getEditableText().append(imgData.shortAddr);
-            time.getEditableText().append(imgData.time.format(DateTimeFormatter.ofPattern("HH:mm")));
-        }
-        builder.setView(v);
-        Dialog dialog = builder.create();
-        ((Button) v.findViewById(R.id.closebutton)).setOnClickListener(v1->dialog.dismiss());
-        updateValues.setOnClickListener(v1->{
-            if (shortAddr.getText().toString().isEmpty()){
-                autoFillDetails(Float.parseFloat(lat.getText().toString()),Float.parseFloat(lon.getText().toString()));
-            }else{
-                autoFillDetails(Float.parseFloat(lat.getText().toString()),Float.parseFloat(lon.getText().toString()), shortAddr.getText().toString());
-            }
-            if (imgData!=null && !date.getText().toString().isEmpty() && !time.getText().toString().isEmpty()) {
-                imgData.time = LocalDateTime.parse(date.getText().toString() + " @ " + time.getText().toString() , DateTimeFormatter.ofPattern("dd/MM/yyyy @ HH:mm"));
-            }
-            dialog.dismiss();
-        });
-        checkBox.addOnCheckedStateChangedListener((materialCheckBox, i) -> {
-            if (i == MaterialCheckBox.STATE_CHECKED){
-                ((TextInputLayout) v.findViewById(R.id.short_addr_layout)).setVisibility(VISIBLE);
-            }else{
-                ((TextInputLayout) v.findViewById(R.id.short_addr_layout)).setVisibility(GONE);
 
-            }
-        });
-        time.setOnTouchListener((v2, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_UP){
-                MaterialTimePicker timePicker = new MaterialTimePicker.Builder()
-                        .setTitleText("Choose the Time")
-                        .setTimeFormat(TimeFormat.CLOCK_12H)
-                        .setHour(LocalDateTime.now().getHour())
-                        .setMinute(LocalDateTime.now().getMinute())
-                        .build();
-                timePicker.addOnPositiveButtonClickListener(dialog1 -> {
-                    time.setText(String.format("%2s:%2s", timePicker.getHour(), timePicker.getMinute()).replace(" ", "0"));
-                });
-                timePicker.show(getSupportFragmentManager(), "Time_Picker");
-            }
-            return true;
-        });
-        date.setOnTouchListener((v2,event)->{
-            if (event.getAction() == MotionEvent.ACTION_UP){
-                MaterialDatePicker<Long> datePicker = MaterialDatePicker.Builder.datePicker()
-                        .setTitleText("Choose Date")
-                        .build();
-                datePicker.show(getSupportFragmentManager(), "DATE_PICKER");
-                datePicker.addOnPositiveButtonClickListener(dialog1 -> {
-                    date.setText(Instant.ofEpochMilli(datePicker.getSelection()).atZone(ZoneId.of("UTC")).toLocalDateTime().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
-                });
-            }
-            return true;
-        });
-        dialog.show();
-        Window window = dialog.getWindow();
-        if (window != null) {
-            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
-        }
-    }
-
-
-    private void checkSharedPrefs(){
-        SharedPreferences sharedPreferences = getSharedPreferences("overlay", MODE_PRIVATE);
+    private boolean hasMetaSaved(){
         String shortAddr = sharedPreferences.getString("shortAddr", null);
         String longAddr = sharedPreferences.getString("longAddr", null);
         Float lat = sharedPreferences.getFloat("lat", 0.0f);
         Float lon = sharedPreferences.getFloat("lon", 0.0f);
-        Float textSize = sharedPreferences.getFloat("textSize", 0.0f);
-        if (shortAddr != null && longAddr!=null && lat!= 0.0f && lon != 0.0f){
-            imgData = new ImageDetails();
-            imgData.shortAddr = shortAddr;
-            imgData.displayName = longAddr;
-            imgData.latitude = lat;
-            imgData.longitude = lon;
-            if (textSize != 0.0f){
-                imgData.textSize = textSize;
-            }
+        if (lat == 0.0f || lon == 0.0f ) return false;
+        else if (longAddr == null || shortAddr == null){
+            autoFillDetails(lat, lon, null, new autFillDetailsEvents() {
+                @Override
+                public void onSuccess(ImageDetails img) {
+
+                }
+
+                @Override
+                public void onError(String API) {
+
+                }
+            });
+            return false;
+        }
+        return true;
+    }
+    private void loadFromSharedPrefs(){
+        String shortAddr = sharedPreferences.getString("shortAddr", null);
+        String longAddr = sharedPreferences.getString("longAddr", null);
+        float lat = sharedPreferences.getFloat("lat", 0.0f);
+        float lon = sharedPreferences.getFloat("lon", 0.0f);
+        float textSize = sharedPreferences.getFloat("textSize", 0.0f);
+        imgData = new ImageDetails();
+        imgData.shortAddr = shortAddr;
+        imgData.displayName = longAddr;
+        imgData.latitude = lat;
+        imgData.longitude = lon;
+        if (textSize != 0.0f){
+            imgData.textSize = textSize;
         }
     }
 
     public void saveSharedPrefs(ImageDetails imgData){
-        SharedPreferences sharedPreferences = getSharedPreferences("overlay", MODE_PRIVATE);
         sharedPreferences.edit().putString("shortAddr", imgData.shortAddr).apply();
         sharedPreferences.edit().putString("longAddr", imgData.displayName).apply();
         sharedPreferences.edit().putFloat("lat", (float) imgData.latitude).apply();
         sharedPreferences.edit().putFloat("lon", (float) imgData.longitude).apply();
     }
 
-    public void autoFillDetails(float lat, float lon){
+    private interface autFillDetailsEvents{
+        void onSuccess(ImageDetails img);
+        void onError(String API);
+    }
+    private void autoFillDetails(float lat, float lon, String short_addr, autFillDetailsEvents callback){
         OverlayHandler overlayHandler = new OverlayHandler();
+        DialogsHandler.LoadingDialogEvent loadingDialog = dialogsHandler.LoadingDialog();
+        loadingDialog.show();
         new Thread(() -> {
             ImageDetails x = overlayHandler.fetchDetails(lat, lon);;
             x.mapSnapPath = overlayHandler.FetchImage(lat, lon);
             runOnUiThread(()->{
-                if (x.mapSnapPath == null) {
-                    Toast.makeText(this, "Unable to Reach Google Maps API", Toast.LENGTH_SHORT).show();
-                    finish();
+                if (x.displayName == null) {
+                    callback.onError("OpenStreet");
                 }
-                imgData= x;
-                saveSharedPrefs(x);
+                if (x.mapSnapPath == null) {
+//                    Toast.makeText(this, "Unable to Reach Google Maps API", Toast.LENGTH_SHORT).show();
+//                    finish();
+                    callback.onError("Google Maps");
+                }
+                if (short_addr != null) x.shortAddr = short_addr;
+//                imgData= x;
+//                saveSharedPrefs(x);
+                callback.onSuccess(x);
+                loadingDialog.dismiss();
             });
         }).start();
     }
-    public void autoFillDetails(float lat, float lon, String short_addr){
-        OverlayHandler overlayHandler = new OverlayHandler();
-        new Thread(() -> {
-            ImageDetails x = overlayHandler.fetchDetails(lat, lon);
-            x.mapSnapPath = overlayHandler.FetchImage(lat, lon);
-            runOnUiThread(()->{
-                if (x.mapSnapPath == null) {
-                    Toast.makeText(this, "Unable to Reach Google Maps API", Toast.LENGTH_SHORT).show();
-                    finish();
-                }
-                x.shortAddr = short_addr;
-                imgData= x;
-                saveSharedPrefs(x);
-            });
-        }).start();
-    }
-
     public void saveImage(){
-        SharedPreferences sharedPreferences = getSharedPreferences("overlay", MODE_PRIVATE);
         sharedPreferences.edit().putFloat("textSize", imgData.textSize).apply();
 
         ContentValues contentValues = new ContentValues();
@@ -320,32 +301,26 @@ public class PreviewActivity extends AppCompatActivity {
                 finish();
             } finally {
 //                contentValues.put(MediaStore.Images.Media.IS_PENDING, false);
-                Intent intent = new Intent(PreviewActivity.this, MainActivity.class);
-                startActivity(intent);
+//                Intent intent = new Intent(PreviewActivity.this, MainActivity.class);
+//                startActivity(intent);
+                finish();
             }
 
         }
     }
 
-    public void showGeoTaggedImg(String uri){
+    public void showGeoTaggedImg(Bitmap imgorg){
             OverlayHandler overlayHandler = new OverlayHandler();
-
-            if (imgData == null ){
-                checkSharedPrefs();
-                if (imgData == null) {return;}
-            }
-            AtomicReference<ImageDetails> details = new AtomicReference<>(new ImageDetails());
             new Thread(() -> {
-                ImageDetails x = imgData;
-                x.mapSnapPath = overlayHandler.FetchImage(x.latitude, x.longitude);
+                if (imgData.mapSnapPath == null ){
+                    imgData.mapSnapPath = overlayHandler.FetchImage(imgData.latitude, imgData.longitude);
+                }
                 runOnUiThread(()->{
-                    if (x.mapSnapPath == null) {
+                    if (imgData.mapSnapPath == null) {
                         Toast.makeText(this, "Unable to Reach Google Maps API", Toast.LENGTH_SHORT).show();
                         finish();
                     }
-                    details.set(x);
-                    Bitmap img = null;
-                    img = overlayHandler.AddOverlay(RoatateImageIFExif(uri), details.get());
+                    Bitmap img = overlayHandler.AddOverlay(imgorg, imgData);
                     editedImg = img;
                     imgV.setImageBitmap(img);
                 });
