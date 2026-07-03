@@ -21,7 +21,7 @@ GeoTagger is an Android application that enables users to add rich geotag overla
 
 1. Clone the repository to your local machine:
    ```bash
-   git clone <your-repository-url>
+   git clone https://github.com/Aquarray/GeoTag-Adder.git
    ```
 2. Open the project using **Android Studio**.
 3. Ensure you have your Google Maps API setup correctly if needed (check your `local.properties` or resource files where the Maps API key might be required for the `OverlayHandler` to function).
