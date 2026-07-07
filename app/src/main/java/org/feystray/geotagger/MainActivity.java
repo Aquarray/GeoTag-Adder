@@ -4,20 +4,27 @@ import static androidx.camera.core.CameraSelector.LENS_FACING_BACK;
 
 import android.Manifest;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Camera;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.Surface;
+import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
@@ -59,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
     ExecutorService cameraExecutor;
 
     ProcessCameraProvider cameraProvider;
+    Button CaptureButton ;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,8 +84,9 @@ public class MainActivity extends AppCompatActivity {
         }else{
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 10);
         }
+        CaptureButton = findViewById(R.id.capture);
 
-        ((Button) findViewById(R.id.capture)).setOnClickListener(v->captureImage());
+        CaptureButton.setOnClickListener(v->captureImage());
         cameraExecutor = Executors.newSingleThreadExecutor();
         Button openGallery = findViewById(R.id.openGallery);
         openGallery.setOnClickListener(v->{
@@ -155,6 +164,11 @@ public class MainActivity extends AppCompatActivity {
         ImageCapture.OutputFileOptions outputFileOptions = new ImageCapture.OutputFileOptions.Builder(
                 cacheFile
         ).build();
+        Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        vibrator.cancel();
+        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK));
+
+        CaptureButton.setBackgroundTintList(ColorStateList.valueOf(Color.RED));
         imgCapture.takePicture(outputFileOptions, ContextCompat.getMainExecutor(MainActivity.this), new ImageCapture.OnImageSavedCallback() {
             @Override
             public void onImageSaved(ImageCapture.@org.jspecify.annotations.NonNull OutputFileResults outputFileResults) {
@@ -164,6 +178,7 @@ public class MainActivity extends AppCompatActivity {
                     Log.e("Image", "Image saved Sucessfuly "+ cacheURI);
                     Intent intent = new Intent(MainActivity.this, PreviewActivity.class);
                     intent.putExtra("URI", cacheURI.toString());
+                    CaptureButton.setBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
                     startActivity(intent);
                 });
             }

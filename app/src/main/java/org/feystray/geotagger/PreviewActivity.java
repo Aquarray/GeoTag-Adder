@@ -13,6 +13,7 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
+import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.VibrationEffect;
@@ -52,6 +53,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class PreviewActivity extends AppCompatActivity {
@@ -283,7 +285,6 @@ public class PreviewActivity extends AppCompatActivity {
     }
     public void saveImage(){
         sharedPreferences.edit().putFloat("textSize", imgData.textSize).apply();
-
         ContentValues contentValues = new ContentValues();
         contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, "GeoTagged_"+ LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".jpg");
         contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
@@ -296,17 +297,34 @@ public class PreviewActivity extends AppCompatActivity {
                 editedImg.compress(Bitmap.CompressFormat.JPEG, 100, os);
                 os.flush();
                 os.close();
+                //Add Exif Data
+                ExifInterface exifInterface = new ExifInterface(Objects.requireNonNull(getContentResolver().openFileDescriptor(uri, "rw")).getFileDescriptor());
+                String latRef = imgData.latitude >= 0 ? "N" : "S";
+                String lonRef = imgData.longitude >= 0 ? "E" : "W";
+                String latExif = convertToDmsString(Math.abs(imgData.latitude));
+                String lonExif = convertToDmsString(Math.abs(imgData.longitude));
+                exifInterface.setAttribute(ExifInterface.TAG_GPS_LATITUDE, latExif);
+                exifInterface.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, latRef);
+                exifInterface.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, lonExif);
+                exifInterface.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, lonRef);
+                exifInterface.saveAttributes();
             } catch (IOException e) {
                 Toast.makeText(this, "Couldn't Save Image due to invalid URI", Toast.LENGTH_SHORT).show();
                 finish();
             } finally {
-//                contentValues.put(MediaStore.Images.Media.IS_PENDING, false);
-//                Intent intent = new Intent(PreviewActivity.this, MainActivity.class);
-//                startActivity(intent);
                 finish();
             }
 
         }
+    }
+
+    private String convertToDmsString(double coordinate) {
+        int degrees = (int) coordinate;
+        coordinate = (coordinate - degrees) * 60;
+        int minutes = (int) coordinate;
+        coordinate = (coordinate - minutes) * 60;
+        int seconds = (int) (coordinate * 1000);
+        return degrees + "/1," + minutes + "/1," + seconds + "/1000";
     }
 
     public void showGeoTaggedImg(Bitmap imgorg){
