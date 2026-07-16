@@ -16,6 +16,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -74,20 +76,20 @@ public class OverlayHandler {
     }
 
 
-    public Bitmap AddOverlay(Bitmap imgPath, ImageDetails details){
-        Bitmap mutablebitmap = imgPath.copy(Bitmap.Config.ARGB_8888, true);
+    public void AddOverlay(ImageDetails details, Image img){
+        Bitmap mutablebitmap = img.originalImage.copy(Bitmap.Config.ARGB_8888, true);
         Canvas canvas = new Canvas(mutablebitmap);
-        drawGeoTag(canvas, canvas.getWidth(), canvas.getHeight(), details);
-        return mutablebitmap;
+        drawGeoTag(canvas, canvas.getWidth(), canvas.getHeight(), details ,img.time);
+        img.editedImage = mutablebitmap;
     }
 
-    public void drawGeoTag(Canvas canvas, int maxWidth, int maxHeight, ImageDetails detail){
+    public void drawGeoTag(Canvas canvas, int maxWidth, int maxHeight, ImageDetails detail, LocalDateTime time){
         Paint bgPaint = new Paint();
         bgPaint.setColor(Color.argb(191, 0,0,0));
-        canvas.drawRect(0, (int)(maxHeight*0.8), maxWidth, maxHeight, bgPaint);
+        canvas.drawRect(0, (int)(maxHeight*0.6), maxWidth, maxHeight, bgPaint);
 
         Bitmap bitmap = BitmapFactory.decodeByteArray(detail.mapSnapPath,0 , detail.mapSnapPath.length);
-        canvas.drawBitmap(bitmap,null ,new Rect((int)(maxWidth*0.05), (int)(maxHeight*0.82), (int)(maxWidth*0.29), (int)(maxHeight*0.98)), null);
+        canvas.drawBitmap(bitmap,null ,new Rect((int)(maxWidth*0.05), (int)(maxHeight*0.62), (int)(maxWidth*0.29), (int)(maxHeight*0.98)), null);
         TextPaint myTextPaint = new TextPaint();
         myTextPaint.setAntiAlias(true);
         myTextPaint.setTextSize(detail.textSize *14);
@@ -100,10 +102,10 @@ public class OverlayHandler {
         metadata.append("\n");
         metadata.append(String.format("Lat: %.6f Long: %.6f", detail.latitude, detail.longitude));
         metadata.append("\n");
-        metadata.append(detail.getTime());
+        metadata.append(time.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy @ hh:mm a")));
         metadata.append("\n");
         StaticLayout layout = new StaticLayout(metadata.toString(), myTextPaint,(int)(maxWidth *0.68), Layout.Alignment.ALIGN_NORMAL, 1.3f , 0 , false);
-        canvas.translate((int)(maxWidth*0.3), (int)(maxHeight*0.82));
+        canvas.translate((int)(maxWidth*0.3), (int)(maxHeight*0.62));
         layout.draw(canvas);
     }
 }

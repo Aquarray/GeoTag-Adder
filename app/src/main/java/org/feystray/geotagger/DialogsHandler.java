@@ -36,12 +36,13 @@ public class DialogsHandler {
     }
 
     public interface LocationandTimeDialogEvent{
-        void onSave(float lat, float lon, LocalDateTime datenTime, String short_Addr);
+        void onSave(float lat, float lon, String short_Addr , LocalDateTime datenTime);
+        void onSave(float lat, float lon, String short_Addr , LocalDateTime fromTime, LocalDateTime toTime);
         void onCancel();
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    public void showLocationAndTimeDialog(ImageDetails initalDetails, FragmentManager fm, LocationandTimeDialogEvent callback){
+    public void showLocationAndTimeDialog(ImageDetails initalDetails, FragmentManager fm, boolean isMultiMode, LocalDateTime defaultTime ,LocationandTimeDialogEvent callback){
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context, R.style.FullscreenDialog);
         View v = LayoutInflater.from(context).inflate(R.layout.more_edit_dialog, null);
         Button updateValues = v.findViewById(R.id.button2);
@@ -51,14 +52,20 @@ public class DialogsHandler {
         EditText time = v.findViewById(R.id.time);
         EditText shortAddr = v.findViewById(R.id.short_addr);
         MaterialCheckBox checkBox = v.findViewById(R.id.showadvanced);
+        EditText fromTime = v.findViewById(R.id.fromTime);
+        EditText toTime = v.findViewById(R.id.endTime);
         //LoadInital Details
         if (initalDetails != null){
             lat.getEditableText().append(String.valueOf(initalDetails.latitude));
             lon.getEditableText().append(String.valueOf(initalDetails.longitude));
-            date.getEditableText().append(initalDetails.time.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+            date.getEditableText().append(defaultTime != null ? defaultTime.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+            fromTime.getEditableText().append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")));
+            toTime.getEditableText().append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")));
             shortAddr.getEditableText().append(initalDetails.shortAddr);
-            time.getEditableText().append(initalDetails.time.format(DateTimeFormatter.ofPattern("HH:mm")));
         }
+        ((TextInputLayout) v.findViewById(R.id.timeLayout)).setVisibility(isMultiMode ? GONE : VISIBLE);
+        ((TextInputLayout) v.findViewById(R.id.fromTimeLayout)).setVisibility(isMultiMode ? VISIBLE: GONE);
+        ((TextInputLayout) v.findViewById(R.id.endTimeLayout)).setVisibility(isMultiMode ? VISIBLE: GONE);
         //
         builder.setView(v);
         Dialog dialog = builder.create();
@@ -67,14 +74,24 @@ public class DialogsHandler {
             dialog.dismiss();
         });
         updateValues.setOnClickListener(v1->{
-            callback.onSave(
-                    Float.parseFloat(lat.getText().toString()),
-                    Float.parseFloat(lon.getText().toString()),
-                    !date.getText().toString().isEmpty() && !time.getText().toString().isEmpty()
-                            ? LocalDateTime.parse(date.getText().toString() + " @ " + time.getText().toString() , DateTimeFormatter.ofPattern("dd/MM/yyyy @ HH:mm"))
-                            : null,
-                    !shortAddr.getText().toString().isEmpty() ? shortAddr.getText().toString() : null
-                    );
+            if (isMultiMode){
+                callback.onSave(
+                        Float.parseFloat(lat.getText().toString()),
+                        Float.parseFloat(lon.getText().toString()),
+                        !shortAddr.getText().toString().isEmpty() ? shortAddr.getText().toString() : null,
+                        LocalDateTime.parse(date.getText().toString() + " @ " + fromTime.getText().toString() , DateTimeFormatter.ofPattern("dd/MM/yyyy @ HH:mm")),
+                        LocalDateTime.parse(date.getText().toString() + " @ " + toTime.getText().toString() , DateTimeFormatter.ofPattern("dd/MM/yyyy @ HH:mm"))
+                );
+            }else{
+                callback.onSave(
+                        Float.parseFloat(lat.getText().toString()),
+                        Float.parseFloat(lon.getText().toString()),
+                        !shortAddr.getText().toString().isEmpty() ? shortAddr.getText().toString() : null,
+                        !date.getText().toString().isEmpty() && !time.getText().toString().isEmpty()
+                                ? LocalDateTime.parse(date.getText().toString() + " @ " + time.getText().toString() , DateTimeFormatter.ofPattern("dd/MM/yyyy @ HH:mm"))
+                                : null
+                );
+            }
 //            if (shortAddr.getText().toString().isEmpty()){
 //                autoFillDetails(Float.parseFloat(lat.getText().toString()),Float.parseFloat(lon.getText().toString()), null);
 //            }else{
@@ -103,6 +120,36 @@ public class DialogsHandler {
                         .build();
                 timePicker.addOnPositiveButtonClickListener(dialog1 -> {
                     time.setText(String.format("%2s:%2s", timePicker.getHour(), timePicker.getMinute()).replace(" ", "0"));
+                });
+                timePicker.show(fm, "Time_Picker");
+            }
+            return true;
+        });
+        fromTime.setOnTouchListener((v2, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_UP){
+                MaterialTimePicker timePicker = new MaterialTimePicker.Builder()
+                        .setTitleText("Choose the Start Time")
+                        .setTimeFormat(TimeFormat.CLOCK_12H)
+                        .setHour(LocalDateTime.now().getHour())
+                        .setMinute(LocalDateTime.now().getMinute())
+                        .build();
+                timePicker.addOnPositiveButtonClickListener(dialog1 -> {
+                    fromTime.setText(String.format("%2s:%2s", timePicker.getHour(), timePicker.getMinute()).replace(" ", "0"));
+                });
+                timePicker.show(fm, "Time_Picker");
+            }
+            return true;
+        });
+        toTime.setOnTouchListener((v2, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_UP){
+                MaterialTimePicker timePicker = new MaterialTimePicker.Builder()
+                        .setTitleText("Choose the End Time")
+                        .setTimeFormat(TimeFormat.CLOCK_12H)
+                        .setHour(LocalDateTime.now().getHour())
+                        .setMinute(LocalDateTime.now().getMinute())
+                        .build();
+                timePicker.addOnPositiveButtonClickListener(dialog1 -> {
+                    toTime.setText(String.format("%2s:%2s", timePicker.getHour(), timePicker.getMinute()).replace(" ", "0"));
                 });
                 timePicker.show(fm, "Time_Picker");
             }

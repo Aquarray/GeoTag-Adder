@@ -28,6 +28,10 @@ import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -50,6 +54,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -90,24 +95,48 @@ public class MainActivity extends AppCompatActivity {
         cameraExecutor = Executors.newSingleThreadExecutor();
         Button openGallery = findViewById(R.id.openGallery);
         openGallery.setOnClickListener(v->{
-            Intent intent = new Intent(MediaStore.ACTION_PICK_IMAGES);
-            startActivityForResult(intent, 20);
+//            Intent intent = new Intent(MediaStore.ACTION_PICK_IMAGES);
+//            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+//            intent.setAction(Intent.ACTION_GET_CONTENT);
+//            startActivityForResult(intent, 20);
+            pickmedia.launch(new PickVisualMediaRequest.Builder()
+                    .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE)
+                    .build());
         });
 
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode == RESULT_OK){
-            if (requestCode == 20){
-                Uri selctedImage = data.getData();
+
+    private final ActivityResultLauncher<PickVisualMediaRequest> pickmedia = registerForActivityResult(new ActivityResultContracts.PickMultipleVisualMedia(), new ActivityResultCallback<List<Uri>>() {
+        @Override
+        public void onActivityResult(List<Uri> o) {
+            if (!o.isEmpty()) {
+//                Uri selctedImage = o.get(0);
+                StringBuilder data = new StringBuilder();
+                for (Uri x : o){
+                    data.append(x.toString());
+                    data.append(";");
+                }
+
                 Intent intent = new Intent(MainActivity.this, PreviewActivity.class);
-                intent.putExtra("URI", selctedImage.toString());
+                intent.putExtra("URI", data.toString());
                 startActivity(intent);
             }
         }
-    }
+    });
+
+//    @Override
+//    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+//        super.onActivityResult(requestCode, resultCode, data);
+//        if (resultCode == RESULT_OK){
+//            if (requestCode == 20){
+//                Uri selctedImage = data.getData();
+//                Intent intent = new Intent(MainActivity.this, PreviewActivity.class);
+//                intent.putExtra("URI", selctedImage.toString());
+//                startActivity(intent);
+//            }
+//        }
+//    }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {

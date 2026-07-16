@@ -12,7 +12,6 @@ public class ImageDetails {
 
     public double longitude;
 
-    public LocalDateTime time = LocalDateTime.now();
 
     public byte[] mapSnapPath;
 
@@ -20,9 +19,10 @@ public class ImageDetails {
 
     public String shortAddr;
 
-    public String getTime(){
-        return time.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy @ hh:mm a"));
-    }
+
+//    public String getTime(){
+//        return time.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy @ hh:mm a"));
+//    }
 
 //    public String getShortAddress(){
 //        return String.format("%s, %s, %s", area, state, country);
@@ -31,6 +31,6 @@ public class ImageDetails {
     @NonNull
     @Override
     public String toString() {
-        return String.format("shortAddress=%s;longAddress=%s;time=%s;textSize=%f;long=%f;lat=%f", shortAddr, displayName, getTime(), textSize, longitude,latitude);
+        return String.format("shortAddress=%s;longAddress=%s;textSize=%f;long=%f;lat=%f", shortAddr, displayName, textSize, longitude,latitude);
     }
 }

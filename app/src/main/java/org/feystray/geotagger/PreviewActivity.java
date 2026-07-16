@@ -15,6 +15,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.media.ExifInterface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -32,6 +33,7 @@ import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -45,29 +47,40 @@ import com.google.android.material.slider.Slider;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.timepicker.MaterialTimePicker;
 import com.google.android.material.timepicker.TimeFormat;
+import com.google.common.collect.BiMap;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class PreviewActivity extends AppCompatActivity {
 
-    ImageDetails imgData = null;
     ImageView imgV;
-
-    Bitmap editedImg;
 
     Boolean EditMode = false;
 
     DialogsHandler dialogsHandler;
     SharedPreferences sharedPreferences;
 
+    OverlayHandler overlayHandler;
+
+    List<Image> images = new ArrayList<>();
+
+    ImageDetails imgData;
+
+
+
+    @RequiresApi(api = Build.VERSION_CODES.VANILLA_ICE_CREAM)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -81,19 +94,23 @@ public class PreviewActivity extends AppCompatActivity {
 
         dialogsHandler = new DialogsHandler(this);
         sharedPreferences = getSharedPreferences("overlay", MODE_PRIVATE);
+        overlayHandler = new OverlayHandler();
         imgV = findViewById(R.id.imageView);
 
-        String imageURI = getIntent().getStringExtra("URI");
-        if(imageURI==null) {
+        String data = getIntent().getStringExtra("URI");
+        if(data==null) {
             Toast.makeText(this, "Invalid Image", Toast.LENGTH_SHORT).show();
             finish();
         }
-        Bitmap orgImg = RoatateImageIFExif(imageURI);
+        String[] imageURI = data.split(";");
+        for (String x : imageURI){
+            images.add(new Image(RoatateImageIFExif(x) , LocalDateTime.now()));
+        }
         if (hasMetaSaved()){
             loadFromSharedPrefs();
-            showGeoTaggedImg(orgImg);
+            PreviewNewImage();
         }else{
-            imgV.setImageBitmap(orgImg);
+            imgV.setImageBitmap(images.getLast().originalImage);
         }
 
         Button editButton = findViewById(R.id.editButton);
@@ -117,18 +134,52 @@ public class PreviewActivity extends AppCompatActivity {
         });
         ((FloatingActionButton) findViewById(R.id.saveButton)).setOnClickListener(v->saveImage());
         moreOptions.setOnClickListener(v->{
-            dialogsHandler.showLocationAndTimeDialog(imgData, getSupportFragmentManager(), new DialogsHandler.LocationandTimeDialogEvent() {
+            dialogsHandler.showLocationAndTimeDialog(imgData, getSupportFragmentManager(),
+                    images.size() > 1,
+                    images.get(0).time
+                    ,new DialogsHandler.LocationandTimeDialogEvent() {
                 @Override
-                public void onSave(float lat, float lon, LocalDateTime datenTime, String short_Addr) {
+                public void onSave(float lat, float lon, String short_Addr, LocalDateTime datenTime) {
                     autoFillDetails(lat, lon, short_Addr, new autFillDetailsEvents() {
                         @Override
                         public void onSuccess(ImageDetails img) {
+                            if (imgData != null){
+                                img.textSize = imgData.textSize;
+                            }
+                            saveSharedPrefs(img);
+                            imgData = img;
                             if (datenTime != null){
-                                img.time = datenTime;
+                                images.get(0).time = datenTime;
+                            }
+                            PreviewNewImage();
+                        }
+
+                        @Override
+                        public void onError(String API) {
+                            Toast.makeText(PreviewActivity.this, "Unable to Reach "+API+" API", Toast.LENGTH_SHORT).show();
+                            finish();
+                        }
+                    });
+                }
+
+                @Override
+                public void onSave(float lat, float lon, String short_Addr, LocalDateTime fromTime, LocalDateTime toTime) {
+                    autoFillDetails(lat, lon, short_Addr, new autFillDetailsEvents() {
+                        @Override
+                        public void onSuccess(ImageDetails img) {
+                            if (imgData != null){
+                                img.textSize = textSizeSlide.getValue();
                             }
                             imgData = img;
                             saveSharedPrefs(img);
-                            showGeoTaggedImg(orgImg);
+                            long maxminutes = Duration.between(fromTime, toTime).toMinutes();
+                            for(int i=0; i< images.size(); i++){
+                                Image im = images.get(i);
+                                im.time= fromTime.plusMinutes(maxminutes- new Random().nextLong(maxminutes));
+                                images.set(i, im);
+                            }
+                            PreviewNewImage();
+
                         }
 
                         @Override
@@ -159,7 +210,7 @@ public class PreviewActivity extends AppCompatActivity {
             @Override
             public void onStopTrackingTouch(@NonNull Slider slider) {
                 if (imgData!=null ) imgData.textSize = slider.getValue();
-                showGeoTaggedImg(orgImg);
+                PreviewNewImage();
             }
         });
         saveButton.setOnClickListener(v->saveImage());
@@ -237,15 +288,13 @@ public class PreviewActivity extends AppCompatActivity {
         String longAddr = sharedPreferences.getString("longAddr", null);
         float lat = sharedPreferences.getFloat("lat", 0.0f);
         float lon = sharedPreferences.getFloat("lon", 0.0f);
-        float textSize = sharedPreferences.getFloat("textSize", 0.0f);
+        float textSize = sharedPreferences.getFloat("textSize", 1.2f);
         imgData = new ImageDetails();
         imgData.shortAddr = shortAddr;
         imgData.displayName = longAddr;
         imgData.latitude = lat;
         imgData.longitude = lon;
-        if (textSize != 0.0f){
-            imgData.textSize = textSize;
-        }
+        imgData.textSize = textSize;
     }
 
     public void saveSharedPrefs(ImageDetails imgData){
@@ -285,37 +334,45 @@ public class PreviewActivity extends AppCompatActivity {
     }
     public void saveImage(){
         sharedPreferences.edit().putFloat("textSize", imgData.textSize).apply();
-        ContentValues contentValues = new ContentValues();
-        contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, "GeoTagged_"+ LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".jpg");
-        contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
-        contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/GeoTagged_Capture");
+        DrawOverlaysOnAll(new DrawOverALLEvents() {
+            @Override
+            public void onSuccess() {
+                for (Image i : images){
+                    ContentValues contentValues = new ContentValues();
+                    contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, "GeoTagged_"+ System.currentTimeMillis() + ".jpg");
+                    contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
+                    contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/GeoTagged_Capture");
 //        contentValues.put(MediaStore.Images.Media.IS_PENDING, true);
-        Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues);
-        if (uri != null){
-            try {
-                OutputStream os = getContentResolver().openOutputStream(uri);
-                editedImg.compress(Bitmap.CompressFormat.JPEG, 100, os);
-                os.flush();
-                os.close();
-                //Add Exif Data
-                ExifInterface exifInterface = new ExifInterface(Objects.requireNonNull(getContentResolver().openFileDescriptor(uri, "rw")).getFileDescriptor());
-                String latRef = imgData.latitude >= 0 ? "N" : "S";
-                String lonRef = imgData.longitude >= 0 ? "E" : "W";
-                String latExif = convertToDmsString(Math.abs(imgData.latitude));
-                String lonExif = convertToDmsString(Math.abs(imgData.longitude));
-                exifInterface.setAttribute(ExifInterface.TAG_GPS_LATITUDE, latExif);
-                exifInterface.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, latRef);
-                exifInterface.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, lonExif);
-                exifInterface.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, lonRef);
-                exifInterface.saveAttributes();
-            } catch (IOException e) {
-                Toast.makeText(this, "Couldn't Save Image due to invalid URI", Toast.LENGTH_SHORT).show();
-                finish();
-            } finally {
-                finish();
-            }
+                    Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues);
+                    if (uri != null){
+                        try {
+                            OutputStream os = getContentResolver().openOutputStream(uri);
+                            i.editedImage.compress(Bitmap.CompressFormat.JPEG, 100, os);
+                            os.flush();
+                            os.close();
+                            //Add Exif Data
+                            ExifInterface exifInterface = new ExifInterface(Objects.requireNonNull(getContentResolver().openFileDescriptor(uri, "rw")).getFileDescriptor());
+                            String latRef = imgData.latitude >= 0 ? "N" : "S";
+                            String lonRef = imgData.longitude >= 0 ? "E" : "W";
+                            String latExif = convertToDmsString(Math.abs(imgData.latitude));
+                            String lonExif = convertToDmsString(Math.abs(imgData.longitude));
+                            exifInterface.setAttribute(ExifInterface.TAG_GPS_LATITUDE, latExif);
+                            exifInterface.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, latRef);
+                            exifInterface.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, lonExif);
+                            exifInterface.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, lonRef);
+                            exifInterface.saveAttributes();
+                        } catch (IOException e) {
+                            Toast.makeText(PreviewActivity.this, "Couldn't Save Image due to invalid URI", Toast.LENGTH_SHORT).show();
+                            finish();
+                        } finally {
+                            finish();
+                        }
 
-        }
+                    }
+                }
+            }
+        });
+
     }
 
     private String convertToDmsString(double coordinate) {
@@ -327,20 +384,45 @@ public class PreviewActivity extends AppCompatActivity {
         return degrees + "/1," + minutes + "/1," + seconds + "/1000";
     }
 
-    public void showGeoTaggedImg(Bitmap imgorg){
-            OverlayHandler overlayHandler = new OverlayHandler();
+    public void PreviewNewImage(){
+        new Thread(() -> {
+            if (imgData.mapSnapPath == null ){
+                imgData.mapSnapPath = overlayHandler.FetchImage(imgData.latitude, imgData.longitude);
+            }
+            runOnUiThread(()->{
+                if (imgData.mapSnapPath == null) {
+                    Toast.makeText(this, "Unable to Reach Google Maps API", Toast.LENGTH_SHORT).show();
+                    finish();
+                }
+                Bitmap img = null;
+                overlayHandler.AddOverlay(imgData, images.get(0));
+                imgV.setImageBitmap(images.get(0).editedImage);
+            });
+        }).start();
+    }
+
+    private interface DrawOverALLEvents{
+        void onSuccess();
+    }
+
+    public void DrawOverlaysOnAll(DrawOverALLEvents callback){
+        DialogsHandler.LoadingDialogEvent loadingDialog = dialogsHandler.LoadingDialog();
+        loadingDialog.show();
             new Thread(() -> {
                 if (imgData.mapSnapPath == null ){
-                    imgData.mapSnapPath = overlayHandler.FetchImage(imgData.latitude, imgData.longitude);
+                    imgData.mapSnapPath =overlayHandler.FetchImage(imgData.latitude, imgData.longitude);
+
                 }
                 runOnUiThread(()->{
                     if (imgData.mapSnapPath == null) {
                         Toast.makeText(this, "Unable to Reach Google Maps API", Toast.LENGTH_SHORT).show();
                         finish();
                     }
-                    Bitmap img = overlayHandler.AddOverlay(imgorg, imgData);
-                    editedImg = img;
-                    imgV.setImageBitmap(img);
+                    for (Image i: images){
+                        overlayHandler.AddOverlay(imgData, i);
+                    }
+                    callback.onSuccess();
+                    loadingDialog.dismiss();
                 });
             }).start();
     }
